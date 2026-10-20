@@ -18,7 +18,7 @@ repository is everything around it.
 - [Quick start](#quick-start)
 - [Profiles instead of accounts](#profiles-instead-of-accounts)
 - [Cell Hub](#cell-hub)
-- [Running the hub in Docker](#running-the-hub-in-docker)
+- [The hub as a cell](#the-hub-as-a-cell)
 - [Cell Launcher](#cell-launcher)
 - [Building from source](#building-from-source)
 - [Layout](#layout)
@@ -95,20 +95,29 @@ Join button starts the game straight into it.
 The API is plain JSON under `/api`; `crates/cell-hub-api` holds the types.
 A legacy `--token` still works as an admin bearer for scripts.
 
-## Running the hub in Docker
+## The hub as a cell
+
+The hub ships as a cell of its own, `cell-hub.cell`, on the releases
+page. It is one file that runs anywhere a cell runs, and the game servers
+it hosts run as cells inside it.
 
 ```sh
-docker compose -f docker/compose.yaml up -d
-docker compose -f docker/compose.yaml logs hub      # the first admin invite code
+./cell-hub.cell                                   # serve on 0.0.0.0:8787; the admin invite code is printed
+CELL_COMMAND=profile ./cell-hub.cell init --name Wil
+CELL_COMMAND=pair    ./cell-hub.cell K7F3-9Q2M    # pair the profile inside the cell as the admin
+CELL_COMMAND=invite  ./cell-hub.cell --role member
+CELL_COMMAND=console ./cell-hub.cell              # the terminal console
+CELL_COMMAND=upload  ./cell-hub.cell game.cell    # from the directory you run it in
 ```
 
-`docker/Dockerfile.hub` builds the web UI and the hub into a 90 MB Debian
-image that runs as an unprivileged user with `/data` as its volume;
-releases push it to `ghcr.io/wiltaylor/cell-hub`. Game servers inside the
-container are cells, so the compose file gives the service `/dev/fuse` and
-lifts Docker's seccomp, AppArmor and masked-`/proc` profiles with
-`security_opt`; it is not `privileged`. Publish each game server's port
-beside `8787`, as the file does for OpenTTD's 3979.
+Arguments after the cell name go to `cell-hub serve`, so
+`./cell-hub.cell --listen 127.0.0.1:9000 --name "My hub"` works. The hub's
+data, members and the profile used by the commands above live in the
+cell's private home, on the host under
+`~/.local/share/cell/apps/dev.wiltaylor.cell-hub/home/`. The cell shares
+the host network, so the hub and every game server listen on their usual
+ports. `just hub-cell` builds it: a static musl hub on an Alpine runtime,
+packaged with the Cell builder fetched from the `cell` releases.
 
 ## Cell Launcher
 
@@ -135,7 +144,7 @@ shows a blank window on some NVIDIA setups.
 - Rust stable.
 - Node 20+ and pnpm for the two front ends.
 - webkit2gtk 4.1 and GTK 3 development packages for the launcher.
-- Docker for the image.
+- `zig` as the musl C compiler and `gh` to fetch the Cell builder, for `just hub-cell`.
 
 ```sh
 just hub-build           # web UI + cell-hub
@@ -155,7 +164,7 @@ crates/cell-identity   profiles: keys, invite codes, signed challenges, export; 
 apps/hub-web           the hub's web UI (SolidJS)
 apps/launcher          the desktop launcher (SolidJS + Tauri; Rust in src-tauri)
 apps/ui                the shared theme and components
-docker/                Dockerfile and compose file for the hub
+packaging/             cell-hub.wcl, the hub as a cell
 ```
 
 ## Releasing
@@ -163,8 +172,8 @@ docker/                Dockerfile and compose file for the hub
 CI runs on every push. A push to `main` whose head commit carries a
 `release: true` trailer (or `pre-release: true` for an alpha) computes the
 version from the conventional-commit subjects since the last `v*` tag,
-builds the hub and the launcher, tags, attaches the binaries with a
-`SHA256SUMS` file, and pushes the hub image to GHCR.
+builds the hub, the launcher and `cell-hub.cell`, tags, and attaches them
+with a `SHA256SUMS` file.
 
 ## License
 

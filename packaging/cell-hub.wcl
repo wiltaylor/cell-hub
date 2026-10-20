@@ -1,0 +1,52 @@
+import <cell.wcl>
+
+// Cell Hub as a cell. One file, runs anywhere a cell runs, and the game
+// servers it hosts run as cells inside it.
+//
+//   ./cell-hub.cell                                  # serve on 0.0.0.0:8787
+//   ./cell-hub.cell --listen 127.0.0.1:9000 --name "My hub"
+//   CELL_COMMAND=profile ./cell-hub.cell init --name Wil
+//   CELL_COMMAND=pair    ./cell-hub.cell K7F3-9Q2M    # the code from the hub's log
+//   CELL_COMMAND=invite  ./cell-hub.cell --role member
+//   CELL_COMMAND=console ./cell-hub.cell
+//
+// The hub's data lives in the cell's private home, in `hub-data`
+// (on the host: ~/.local/share/cell/apps/dev.wiltaylor.cell-hub/home/hub-data).
+app "dev.wiltaylor.cell-hub" {
+  name    = "Cell Hub"
+  version = "0.1.0"
+
+  runtime {
+    base     = "oci://alpine:3.22"
+    packages = ["ca-certificates"]
+  }
+
+  build {
+    copy { from = "../target/x86_64-unknown-linux-musl/release/cell-hub" to = "/app/bin/cell-hub" }
+  }
+
+  entry {
+    // Extra arguments after the cell name go to `cell-hub serve`.
+    exec = ["sh", "-c", "exec /app/bin/cell-hub serve --data \"$HOME/hub-data\" \"$@\"", "cell-hub"]
+    cwd  = "/"
+    command "console" { exec = ["sh", "-c", "exec /app/bin/cell-hub console --url \"${CELL_HUB_URL:-http://127.0.0.1:8787}\" \"$@\"", "cell-hub"] }
+    command "invite"  { exec = ["sh", "-c", "exec /app/bin/cell-hub invite --data \"$HOME/hub-data\" \"$@\"", "cell-hub"] }
+    command "profile" { exec = ["sh", "-c", "exec /app/bin/cell-hub profile \"$@\"", "cell-hub"] }
+    command "pair"    { exec = ["sh", "-c", "exec /app/bin/cell-hub pair --url \"${CELL_HUB_URL:-http://127.0.0.1:8787}\" \"$@\"", "cell-hub"] }
+    command "upload"  { exec = ["sh", "-c", "exec /app/bin/cell-hub upload --url \"${CELL_HUB_URL:-http://127.0.0.1:8787}\" \"$@\"", "cell-hub"] }
+  }
+
+  isolation {
+    // The hub and its game servers listen on the host network.
+    network = true
+    home    = :private
+    // Game servers are cells: they mount their layers over FUSE.
+    bind "dev" { host = "/dev/fuse" guest = "/dev/fuse" optional = false }
+    // Cells to upload from the directory the command was run in.
+    bind "ro"  { host = "$PWD" guest = "$PWD" }
+  }
+
+  integration {
+    gpu { enable = false }
+  }
+}

@@ -2,5 +2,7 @@
 node_modules/
 apps/*/dist/
 hub-data/
+tools/cell-builder.cell
+/dist/
 *.cell
 *.layer

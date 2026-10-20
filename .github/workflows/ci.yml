@@ -146,14 +146,34 @@ jobs:
         run: |
           V="${{ needs.version.outputs.version }}"
           sed -i '0,/^version = ".*"$/s//version = "'"$V"'"/' Cargo.toml
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+      - uses: taiki-e/install-action@just
+      - name: Host setup for cell builds
+        run: |
+          sudo apt-get install -y squashfs-tools uidmap
+          sudo modprobe fuse || true
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - run: rustup target add x86_64-unknown-linux-musl
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir apps/hub-web build && pnpm --dir apps/launcher build
       - run: cargo build --release -p cell-hub -p cell-launcher-app
+      - run: cargo build --release -p cell-hub --target x86_64-unknown-linux-musl
+      - name: Package the hub as a cell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          just cell-builder
+          mkdir -p dist && cd packaging && ../tools/cell-builder.cell build cell-hub.wcl -o ../dist/cell-hub.cell
+          CELL_CMD=verify ../dist/cell-hub.cell
       - name: Stage assets
         run: |
           V="${{ needs.version.outputs.version }}"
           mkdir -p dist
+          mv dist/cell-hub.cell "dist/cell-hub-$V.cell"
           cp target/release/cell-hub "dist/cell-hub-$V-linux-x86_64"
+          cp target/x86_64-unknown-linux-musl/release/cell-hub "dist/cell-hub-$V-linux-x86_64-static"
           cp target/release/cell-launcher-app "dist/cell-launcher-app-$V-linux-x86_64"
           (cd dist && sha256sum * > SHA256SUMS)
           cat dist/SHA256SUMS
@@ -194,36 +214,3 @@ jobs:
           prerelease: ${{ needs.version.outputs.prerelease }}
           generate_release_notes: true
           files: dist/**/*
-
-  # ── Container image ───────────────────────────────────────────────────────
-  # Build the hub image and push it to GHCR as ghcr.io/<owner>/cell-hub:<version>
-  # (+ :latest), per release.
-  image:
-    name: Build & push hub image
-    needs: [version, check]
-    if: needs.version.outputs.do_release == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v7
-      - name: Image ref (lowercase owner)
-        id: ref
-        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cell-hub" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/Dockerfile.hub
-          push: true
-          tags: |
-            ${{ steps.ref.outputs.image }}:${{ needs.version.outputs.version }}
-            ${{ steps.ref.outputs.image }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max

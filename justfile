@@ -29,10 +29,26 @@ hub-serve: hub-build
 hub-console url='http://127.0.0.1:8787':
 	./target/release/cell-hub console --url {{url}}
 
-# Build the hub container image
+# Fetch the Cell builder from the cell repository's releases
+[group('build')]
+cell-builder version='0.3.0':
+	@test -x tools/cell-builder.cell || (gh release download v{{version}} -R wiltaylor/cell -p 'cell-builder-*.cell' -O tools/cell-builder.cell && chmod +x tools/cell-builder.cell)
+
+# Build the hub as a static binary
 [group('hub')]
-hub-image tag='cell-hub:local':
-	docker build -f docker/Dockerfile.hub -t {{tag}} .
+hub-static-build: hub-web-build
+	cargo build --release -p cell-hub --target x86_64-unknown-linux-musl
+
+# Package the hub as a cell: dist/cell-hub.cell
+[group('hub')]
+hub-cell: hub-static-build cell-builder
+	mkdir -p dist
+	cd packaging && ../tools/cell-builder.cell build cell-hub.wcl -o ../dist/cell-hub.cell
+
+# Run the packaged hub (data in the cell's private home)
+[group('hub')]
+hub-cell-run *args:
+	./dist/cell-hub.cell {{args}}
 
 # Build the desktop launcher (Tauri)
 [group('launcher')]
