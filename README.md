@@ -129,11 +129,25 @@ registration. With a hub configured it installs games with progress,
 uploads local cells, lists the hub's servers with Join buttons, pairs with
 peers, shows their presence, and pops a toast for invites.
 
+Build it with the Tauri CLI (`just launcher-build` does): a plain
+`cargo build` of the app crate produces a binary that loads the Vite dev
+URL instead of the embedded front end.
+
 ```sh
 just launcher            # run (builds first if needed)
 just launcher-install    # ~/.local/bin plus an app-menu entry
 just launcher-dev        # Vite + Tauri with hot reload
+just launcher-cell       # package it as dist/cell-launcher.cell
 ```
+
+The launcher also ships as a cell, `cell-launcher.cell`, on the releases
+page: an Arch runtime with webkit2gtk and the game-side libraries, about
+500 MiB, that runs with nothing installed. Games started from it run as
+cells inside it, so the launcher cell carries the display, audio, input
+and GPU grants a game needs and shares the host home for the games
+folder, saves, caches and desktop entries. Each game pays two sandbox
+setups instead of one. NVIDIA games inside it use the fetched driver
+cache, which is shared with the host.
 
 Settings live in the app config directory. The window needs webkit2gtk
 4.1; the app disables webkit's DMABUF renderer by default because it

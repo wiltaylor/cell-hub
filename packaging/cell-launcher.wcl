@@ -1,0 +1,62 @@
+import <cell.wcl>
+
+// Cell Launcher as a cell: the desktop library in one file. Games it
+// starts run as cells inside this cell, so it carries the grants a game
+// needs and shares the real home for the games folder, saves and caches.
+//
+//   ./cell-launcher.cell
+app "dev.wiltaylor.cell-launcher" {
+  name    = "Cell Launcher"
+  version = "0.1.0"
+
+  runtime {
+    base      = "oci://archlinux:base"
+    placement = :embedded
+    packages  = [
+      "webkit2gtk-4.1", "gtk3", "libsoup3", "glib-networking", "gsettings-desktop-schemas",
+      "adwaita-icon-theme", "hicolor-icon-theme", "ttf-dejavu",
+      "xdg-utils", "desktop-file-utils", "gtk-update-icon-cache",
+      "mesa", "vulkan-icd-loader", "vulkan-intel", "vulkan-radeon", "vulkan-swrast",
+      "libpulse", "pipewire", "libxkbcommon-x11",
+    ]
+    // The launcher's own locale: the host's LANG passes through, so the
+    // runtime needs the common UTF-8 locales generated.
+    setup = ["sed -i 's/^#en_US.UTF-8/en_US.UTF-8/; s/^#en_GB.UTF-8/en_GB.UTF-8/; s/^#en_AU.UTF-8/en_AU.UTF-8/; s/^#C.UTF-8/C.UTF-8/' /etc/locale.gen && locale-gen"]
+  }
+
+  build {
+    copy { from = "../target/release/cell-launcher-app" to = "/app/bin/cell-launcher-app" }
+  }
+
+  entry {
+    exec = ["/app/bin/cell-launcher-app"]
+    cwd  = "$PWD"
+  }
+
+  isolation {
+    network = true
+    // The games folder, saves, caches, desktop entries and Steam config are the host's.
+    home    = :host
+    // Games are cells: they mount their layers over FUSE.
+    bind "dev" { host = "/dev/fuse" guest = "/dev/fuse" optional = false }
+    bind "rw"  { host = "/mnt" guest = "/mnt" }
+    bind "rw"  { host = "/media" guest = "/media" }
+    bind "rw"  { host = "/run/media" guest = "/run/media" }
+  }
+
+  integration {
+    display = [:wayland, :x11]
+    audio   = [:pipewire, :pulse]
+    input   = [:gamepad, :uinput]
+    fonts   = true
+    themes  = true
+    // Games inside use the fetched NVIDIA userspace; the host's libraries
+    // are not visible from this runtime. The cache is shared with the host.
+    gpu { enable = true nvidia = :auto }
+    desktop {
+      icon       = "../apps/launcher/src-tauri/icons/128x128.png"
+      comment    = "Your library of portable games"
+      categories = ["Game"]
+    }
+  }
+}

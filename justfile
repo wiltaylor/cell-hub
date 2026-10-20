@@ -50,11 +50,16 @@ hub-cell: hub-static-build cell-builder
 hub-cell-run *args:
 	./dist/cell-hub.cell {{args}}
 
-# Build the desktop launcher (Tauri)
+# Package the launcher as a cell: dist/cell-launcher.cell
+[group('launcher')]
+launcher-cell: launcher-build cell-builder
+	mkdir -p dist
+	cd packaging && ../tools/cell-builder.cell build cell-launcher.wcl -o ../dist/cell-launcher.cell
+
+# Build the desktop launcher through the Tauri CLI (a plain cargo build loads the dev URL)
 [group('launcher')]
 launcher-build: js-install
-	pnpm --dir apps/launcher build
-	cargo build --release -p cell-launcher-app
+	pnpm --dir apps/launcher tauri build --no-bundle
 
 # Run the desktop launcher (builds it first only when the binary is missing)
 [group('launcher')]

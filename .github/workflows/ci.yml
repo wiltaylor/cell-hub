@@ -158,8 +158,10 @@ jobs:
       - run: rustup target add x86_64-unknown-linux-musl
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir apps/hub-web build && pnpm --dir apps/launcher build
-      - run: cargo build --release -p cell-hub -p cell-launcher-app
+      - run: cargo build --release -p cell-hub
       - run: cargo build --release -p cell-hub --target x86_64-unknown-linux-musl
+      # The Tauri CLI embeds the front end; a plain cargo build of the app loads the dev URL.
+      - run: pnpm --dir apps/launcher tauri build --no-bundle
       - name: Package the hub as a cell
         env:
           GH_TOKEN: ${{ github.token }}
@@ -167,11 +169,16 @@ jobs:
           just cell-builder
           mkdir -p dist && cd packaging && ../tools/cell-builder.cell build cell-hub.wcl -o ../dist/cell-hub.cell
           CELL_CMD=verify ../dist/cell-hub.cell
+      - name: Package the launcher as a cell
+        run: |
+          cd packaging && ../tools/cell-builder.cell build cell-launcher.wcl -o ../dist/cell-launcher.cell
+          CELL_CMD=verify ../dist/cell-launcher.cell
       - name: Stage assets
         run: |
           V="${{ needs.version.outputs.version }}"
           mkdir -p dist
           mv dist/cell-hub.cell "dist/cell-hub-$V.cell"
+          mv dist/cell-launcher.cell "dist/cell-launcher-$V.cell"
           cp target/release/cell-hub "dist/cell-hub-$V-linux-x86_64"
           cp target/x86_64-unknown-linux-musl/release/cell-hub "dist/cell-hub-$V-linux-x86_64-static"
           cp target/release/cell-launcher-app "dist/cell-launcher-app-$V-linux-x86_64"
